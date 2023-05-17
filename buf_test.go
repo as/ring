@@ -33,7 +33,7 @@ func TestBufSize(t *testing.T) {
 }
 
 func TestBuf(t *testing.T) {
-	c := Buf{Duration: time.Second / 2}
+	c := Buf{TTL: time.Second / 2}
 	lo := []string{"a", "b", "c", "d", "e", "f", "g", "h", "i"}
 	hi := []string{"A", "B", "C", "D", "E", "F", "G", "H", "I"}
 	i := 0
@@ -64,13 +64,13 @@ func TestBufAlign(t *testing.T) {
 	}
 }
 func TestBufProps(t *testing.T) {
-	if nent > 256{
+	if nent > 256 {
 		t.Skip("skipping this test, use a smaller Buf size (nent > 256)")
 	}
 	wrap := nent + 5
 	for s := 0; s < wrap; s++ {
 		for d := 0; d < wrap; d++ {
-			c := Buf{Duration: 1}
+			c := Buf{TTL: 1}
 			for i := 0; i < s; i++ {
 				c.Put("^", "^")
 			}
@@ -102,7 +102,7 @@ func TestBufProps(t *testing.T) {
 }
 
 func BenchmarkBuf(b *testing.B) {
-	c := Buf{Duration: time.Second / 2}
+	c := Buf{TTL: time.Second / 2}
 	lo := []string{"a", "b", "c", "d", "e", "f", "g", "h", "i"}
 	hi := []string{"A", "B", "C", "D", "E", "F", "G", "H", "I"}
 	i := 0
@@ -156,7 +156,7 @@ func BenchmarkBuf(b *testing.B) {
 }
 
 func BenchmarkBufHuge(b *testing.B) {
-	c := Buf{Duration: time.Second / 2}
+	c := Buf{TTL: time.Second / 2}
 	lo := []string{"a", "b", "c", "d", "e", "f", "g", "h", "i"}
 	hi := []string{"A", "B", "C", "D", "E", "F", "G", "H", "I"}
 	for i := range lo {

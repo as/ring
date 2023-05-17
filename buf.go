@@ -11,8 +11,8 @@ import (
 func nanotime() time.Duration
 
 const (
-	nent         = Size // MUST be a power of 2. See size.go
-	cacheLine    = CacheLine // See size.go
+	nent      = Size      // MUST be a power of 2. See size.go
+	cacheLine = CacheLine // See size.go
 
 	mask         = nent - 1
 	est          = 8 + 8 + (nent * 40)
@@ -20,13 +20,13 @@ const (
 )
 
 func init() {
-	if (nent & mask) != 0{
+	if (nent & mask) != 0 {
 		panic("ring: nent not a power of 2")
 	}
 }
 
 // Buf is a lock-free time-aware ring buffer. The zero value is ready to use and has an expiry
-// time of 20 seconds. Buf retains all values in memory until they are overwritten, but expires 
+// time of 20 seconds. Buf retains all values in memory until they are overwritten, but expires
 // entries based on their time of access.
 //
 // Buf has several properties:
@@ -38,18 +38,19 @@ func init() {
 // (5): A values is overwritten after 256+ calls to Put, regardless of expiry time
 //
 // To use an infinite expiry time, set Buf.Duration to a large value. The zero value
-// means 20 seconds. A good choice is 24*time.Hour. 
+// means 20 seconds. A good choice is 24*time.Hour.
 type Buf struct {
-	x             uint64      // 8
-	time.Duration             // 8
-	c             [nent]entry // (8+8+8)*16
-	_             [cacheLinePad]byte
+	x uint64 // 8
+	// TTL is the time after which keys will be expired. The zero duration means 20s
+	TTL time.Duration // 8
+	c   [nent]entry   // (8+8+8)*16
+	_   [cacheLinePad]byte
 }
 
-// Put inserts the key value pair into the ring, with an expiry of c.Duration. It is not safe
+// Put inserts the key value pair into the ring, with an expiry of c.TTL. It is not safe
 // to modify c.Duration and call c.Put, c.Get, or c.Del concurrently
 func (c *Buf) Put(key, value string) {
-	c.c[atomic.AddUint64(&c.x, 1)&mask] = entry{key: key, value: value, Duration: nanotime()}
+	c.c[atomic.AddUint64(&c.x, 1)&mask] = entry{key: key, value: value, ttl: nanotime()}
 }
 
 // Get returns the value for key. There are three possibilities:
@@ -64,7 +65,7 @@ func (c *Buf) Put(key, value string) {
 // The last case is also possible if value was stored as the empty string. It is not
 // safe to modify c.Duration and call c.Get concurrently
 func (c *Buf) Get(key string) (value string, ok bool) {
-	dur := c.Duration
+	dur := c.TTL
 	if dur == 0 {
 		dur = time.Second
 	}
@@ -83,7 +84,7 @@ func (c *Buf) Get(key string) (value string, ok bool) {
 			// hope youre all doing well. that last condition is for you
 			// thanks in advance for ressurecting me by the way
 			now := nanotime()
-			return v.value, now <= dur+v.Duration && now > v.Duration
+			return v.value, now <= dur+v.ttl && now > v.ttl
 		}
 		si = (si - 1) & mask
 	}
@@ -98,5 +99,5 @@ func (c *Buf) Del(key string) {
 
 type entry struct {
 	key, value string
-	time.Duration
+	ttl        time.Duration
 }
