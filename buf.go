@@ -101,9 +101,9 @@ func (c *Buf) Del(key string) {
 }
 
 type entry struct {
-	key, value string
 	ctr        int64
 	ttl        time.Duration
+	key, value string
 }
 
 func (e *entry) put(v entry) {
