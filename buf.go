@@ -15,7 +15,7 @@ const (
 	cacheLine = CacheLine // See size.go
 
 	mask         = nent - 1
-	est          = 8 + 8 + (nent * 40)
+	est          = 8 + 8 + (nent * 48)
 	cacheLinePad = cacheLine - est%cacheLine
 )
 
@@ -47,12 +47,6 @@ type Buf struct {
 	_   [cacheLinePad]byte
 }
 
-// Put inserts the key value pair into the ring, with an expiry of c.TTL. It is not safe
-// to modify c.Duration and call c.Put concurrently
-func (c *Buf) Put(key, value string) {
-	c.c[atomic.AddUint64(&c.x, 1)&mask] = entry{key: key, value: value, ttl: nanotime()}
-}
-
 // Get returns the value for key. There are three possibilities:
 //
 // (1): key is found, and not expired:
@@ -75,7 +69,8 @@ func (c *Buf) Get(key string) (value string, ok bool) {
 	for si != ei {
 		// items in the ring never shift so we do one complete pass around it
 		// to query for existence (si != ei)
-		v := c.c[si] // arrays are concurrency safe
+
+		v := c.c[si].get(key)
 		if key == v.key {
 			// we return the value and an indicator of whether its expired
 			//
@@ -91,13 +86,44 @@ func (c *Buf) Get(key string) (value string, ok bool) {
 	return "", false
 }
 
+// Put inserts the key value pair into the ring, with an expiry of c.TTL. It is not safe
+// to modify c.Duration and call c.Put concurrently
+func (c *Buf) Put(key, value string) {
+	i := atomic.AddUint64(&c.x, 1) & mask
+	c.c[i].put(entry{key: key, value: value, ttl: nanotime()})
+}
+
 // Del evicts the key. It does not remove the key from memory. This is only useful if the cache has
 // a high c.Duration or the associatd value is an empty string
 func (c *Buf) Del(key string) {
-	c.c[atomic.AddUint64(&c.x, 1)&mask] = entry{key: key}
+	i := atomic.AddUint64(&c.x, 1) & mask
+	c.c[i].put(entry{key: key})
 }
 
 type entry struct {
 	key, value string
+	ctr        int64
 	ttl        time.Duration
+}
+
+func (e *entry) put(v entry) {
+	//if !atomic.CompareAndSwapInt64(&e.ctr, 0, 1) {
+	for !atomic.CompareAndSwapInt64(&e.ctr, 0, 1) {
+		//	return
+	}
+	e.key = v.key
+	e.value = v.value
+	e.ttl = v.ttl
+	atomic.AddInt64(&e.ctr, -1)
+}
+
+func (e *entry) get(key string) (v entry) {
+	n := atomic.AddInt64(&e.ctr, +2)
+	if n&1 == 0 {
+		v.key = e.key
+		v.value = e.value
+		v.ttl = e.ttl
+	}
+	atomic.AddInt64(&e.ctr, -2)
+	return
 }

@@ -27,7 +27,7 @@ func TestBufSize(t *testing.T) {
 	e := (unsafe.Sizeof(entry{}))
 	println("est: ", i+4+(e*nent)+d)
 	println("est: ", est)
-	println(unsafe.Sizeof(Buf{}))
+	println("act: ", unsafe.Sizeof(Buf{}))
 	println(cacheLinePad)
 	println(est + cacheLinePad)
 }
@@ -63,44 +63,30 @@ func TestBufAlign(t *testing.T) {
 		t.Fatalf("not aligned by %d bytes", n%cacheLine)
 	}
 }
-func TestBufProps(t *testing.T) {
-	if nent > 256 {
-		t.Skip("skipping this test, use a smaller Buf size (nent > 256)")
-	}
-	wrap := nent + 5
-	for s := 0; s < wrap; s++ {
-		for d := 0; d < wrap; d++ {
-			c := Buf{TTL: 1}
-			for i := 0; i < s; i++ {
-				c.Put("^", "^")
-			}
-			c.Put("t", "f")
-			for i := 0; i < d; i++ {
-				c.Put("$", "$")
-			}
-			c.Put("t", "p")
-			for i := 0; i < wrap; i++ {
-				v := fmt.Sprintf("%c", 0x41+byte(i))
-				have, ok := c.Get("t")
-				if have == "" {
-					have = "?"
-				}
-				k := "y"
-				if !ok {
-					k = "n"
-				}
-				if printproof {
-					t.Logf("s=%02d d=%02d i=%02d x=%02d t=%s ok=%s %+v", s, d, i, c.x, have, k, c.c)
-				}
-				if have == "f" {
-					t.Fatal("invariant violated, got f")
-				}
-				c.Put(v, v)
-			}
-		}
-	}
-}
 
+func BenchmarkBufGetRecent(b *testing.B) {
+	c := Buf{TTL: time.Hour}
+	c.Put("x", "y")
+	v, _ := c.Get("x")
+	for n := 0; n < b.N; n++ {
+		v, _ = c.Get("x")
+	}
+	_ = v
+
+}
+func BenchmarkBufGetOld(b *testing.B) {
+	c := Buf{TTL: time.Hour}
+	c.Put("x", "y")
+	for i := 0; i < Size-4; i++ {
+		c.Put("a", "b")
+	}
+	v, _ := c.Get("x")
+	for n := 0; n < b.N; n++ {
+		v, _ = c.Get("x")
+	}
+	_ = v
+
+}
 func BenchmarkBuf(b *testing.B) {
 	c := Buf{TTL: time.Second / 2}
 	lo := []string{"a", "b", "c", "d", "e", "f", "g", "h", "i"}
@@ -127,7 +113,7 @@ func BenchmarkBuf(b *testing.B) {
 	})
 
 	b.Run("Parallel", func(b *testing.B) {
-		for _, cpu := range []int{0, 1, 2, 4} {
+		for _, cpu := range []int{1, 2, 4} {
 			b.Run(fmt.Sprintf("%dWriters", cpu), func(b *testing.B) {
 				done := make(chan bool)
 				defer close(done)
@@ -152,6 +138,35 @@ func BenchmarkBuf(b *testing.B) {
 			})
 		}
 	})
+
+}
+
+func TestParallel(t *testing.T) {
+	c := &Buf{}
+	go func() {
+		for i := 0; i < 100; i++ {
+			go func() {
+				for j := 0; j < 100000; j++ {
+					c.Put("x", "y")
+					c.Put("y", "x")
+				}
+			}()
+		}
+	}()
+	go func() {
+		for i := 0; i < 100; i++ {
+			go func() {
+				for j := 0; j < 100000; j++ {
+					c.Get("x")
+					c.Get("y")
+				}
+			}()
+		}
+	}()
+	for i := 0; i < 10000; i++ {
+		c.Get("x")
+		c.Put("x", "a")
+	}
 
 }
 
@@ -187,7 +202,7 @@ func BenchmarkBufHuge(b *testing.B) {
 	})
 
 	b.Run("Parallel", func(b *testing.B) {
-		for _, cpu := range []int{0, 1, 2, 4} {
+		for _, cpu := range []int{1, 2, 4, 8} {
 			b.Run(fmt.Sprintf("%dWriters", cpu), func(b *testing.B) {
 				done := make(chan bool)
 				defer close(done)
