@@ -48,7 +48,7 @@ type Buf struct {
 }
 
 // Put inserts the key value pair into the ring, with an expiry of c.TTL. It is not safe
-// to modify c.Duration and call c.Put, c.Get, or c.Del concurrently
+// to modify c.Duration and call c.Put concurrently
 func (c *Buf) Put(key, value string) {
 	c.c[atomic.AddUint64(&c.x, 1)&mask] = entry{key: key, value: value, ttl: nanotime()}
 }
