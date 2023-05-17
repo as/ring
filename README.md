@@ -68,8 +68,7 @@ func (c *Buf) Get(key string) (value string, ok bool)
 
 func (c *Buf) Put(key, value string)
     Put inserts the key value pair into the ring, with an expiry of TTL
-    It is not safe to modify TTL and call Put, Get, or Del
-    concurrently
+    It is not safe to modify TTL and call Put concurrently
 ```
 
 # benchmarks
